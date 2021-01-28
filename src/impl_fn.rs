@@ -1,3 +1,5 @@
+//nightly functions
+
 #![feature(unboxed_closures, fn_traits)]
 
 #[derive(Clone, Copy)]
