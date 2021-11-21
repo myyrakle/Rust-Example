@@ -1,0 +1,20 @@
+syntax = "proto3";
+
+package tutorial;
+
+// 서비스 정의
+service Foo {
+  // 함수 정의
+  rpc Add (AddRequest) returns (AddReply);
+}
+
+// 요청 파라미터 정보
+message AddRequest {
+  int32 lhs = 1;
+  int32 rhs = 2;
+}
+
+// 응답 파라미터 정보
+message AddReply {
+  int32 result = 1;
+}
