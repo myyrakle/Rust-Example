@@ -35,7 +35,7 @@ impl SetTimeout {
         });
 
         SetTimeout {
-            done: Arc::new(AtomicBool::new(false)),
+            done: _done,
             shared_state: _shared_state,
         }
     }
@@ -69,7 +69,7 @@ fn main() {
             println!("2");
         });
         future.await;
-        println!("1"); // 왜 실행안됨??
+        println!("1");
     });
 
     // "spawner"를 삭제하여 executor가 더 이상 실행할 작업이 없음을 알고 더 이상 들어오는 작업을 받지 않도록 합니다.
@@ -91,52 +91,6 @@ pub struct Executor {
     ready_queue: Receiver<Arc<Task>>,
 }
 
-/// Spawner는 새로운 future들을 task channel에 생성합니다.
-#[derive(Clone)]
-pub struct Spawner {
-    task_sender: SyncSender<Arc<Task>>,
-}
-
-/// "Executor"에게 polling되기 위해 스스로를 reschedule할 수 있는 "Future"입니다.
-pub struct Task {
-    // 진행 중인 futures들.
-    // Mutex는 싱글스레드라서 꼭 필요하지는 않습니다. 문법을 회피하기 위해 넣었고, 대신 UnsafeCell을 써도 됩니다.
-    future: Mutex<Option<BoxFuture<'static, ()>>>,
-
-    /// 스스로를 task queue에 넣는 Handle (다른 작업을 위해 일시중지할때 사용)
-    task_sender: SyncSender<Arc<Task>>,
-}
-
-fn new_executor_and_spawner() -> (Executor, Spawner) {
-    // 한 번에 큐에 허용되는 최대 작업 수.
-    // sync_channel을 단순하기 위해 만든거고, 상용 코드에서는 하지 않습니다.
-    const MAX_QUEUED_TASKS: usize = 10_000;
-    let (task_sender, ready_queue) = sync_channel(MAX_QUEUED_TASKS);
-    (Executor { ready_queue }, Spawner { task_sender })
-}
-
-impl Spawner {
-    fn spawn(&self, future: impl Future<Output = ()> + 'static + Send) {
-        let future = future.boxed();
-        let task = Arc::new(Task {
-            future: Mutex::new(Some(future)),
-            task_sender: self.task_sender.clone(),
-        });
-        self.task_sender.send(task).expect("too many tasks queued");
-    }
-}
-
-impl ArcWake for Task {
-    fn wake_by_ref(arc_self: &Arc<Self>) {
-        // 이 task를 다시 task channel로 전송하여 executor에 의해 다시 폴링되도록 'wake'를 구현한다.
-        let cloned = arc_self.clone();
-        arc_self
-            .task_sender
-            .send(cloned)
-            .expect("too many tasks queued");
-    }
-}
-
 impl Executor {
     pub fn run(&self) {
         while let Ok(task) = self.ready_queue.recv() {
@@ -153,5 +107,51 @@ impl Executor {
                 }
             }
         }
+    }
+}
+
+/// Spawner는 새로운 future들을 task channel에 생성합니다.
+#[derive(Clone)]
+pub struct Spawner {
+    task_sender: SyncSender<Arc<Task>>,
+}
+
+impl Spawner {
+    fn spawn(&self, future: impl Future<Output = ()> + 'static + Send) {
+        let future = future.boxed();
+        let task = Arc::new(Task {
+            future: Mutex::new(Some(future)),
+            task_sender: self.task_sender.clone(),
+        });
+        self.task_sender.send(task).expect("too many tasks queued");
+    }
+}
+
+fn new_executor_and_spawner() -> (Executor, Spawner) {
+    // 한 번에 큐에 허용되는 최대 작업 수.
+    // sync_channel을 단순하기 위해 만든거고, 상용 코드에서는 하지 않습니다.
+    const MAX_QUEUED_TASKS: usize = 10_000;
+    let (task_sender, ready_queue) = sync_channel(MAX_QUEUED_TASKS);
+    (Executor { ready_queue }, Spawner { task_sender })
+}
+
+/// "Executor"에게 polling되기 위해 스스로를 reschedule할 수 있는 "Future"입니다.
+pub struct Task {
+    // 진행 중인 futures들.
+    // Mutex는 싱글스레드라서 꼭 필요하지는 않습니다. 문법을 회피하기 위해 넣었고, 대신 UnsafeCell을 써도 됩니다.
+    future: Mutex<Option<BoxFuture<'static, ()>>>,
+
+    /// 스스로를 task queue에 넣는 Handle (다른 작업을 위해 일시중지할때 사용)
+    task_sender: SyncSender<Arc<Task>>,
+}
+
+impl ArcWake for Task {
+    fn wake_by_ref(arc_self: &Arc<Self>) {
+        // 이 task를 다시 task channel로 전송하여 executor에 의해 다시 폴링되도록 'wake'를 구현한다.
+        let cloned = arc_self.clone();
+        arc_self
+            .task_sender
+            .send(cloned)
+            .expect("too many tasks queued");
     }
 }
