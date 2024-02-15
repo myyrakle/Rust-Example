@@ -1,9 +1,9 @@
 use std::sync::{atomic::AtomicI64, Arc};
 
 fn main() {
-    let barrier = Arc::new(std::sync::Barrier::new(2));
-
     loop {
+        let barrier = Arc::new(std::sync::Barrier::new(2));
+
         let number = Arc::new(AtomicI64::new(0));
         let number2 = Arc::new(AtomicI64::new(0));
 
