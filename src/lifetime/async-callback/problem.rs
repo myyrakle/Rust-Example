@@ -1,10 +1,7 @@
 // Code that doesn't compile
+struct Context {}
 
-struct Context<'a> {
-    _phantom: std::marker::PhantomData<&'a ()>,
-}
-
-impl Context<'_> {
+impl Context {
     fn do_something(&mut self) -> anyhow::Result<()> {
         Ok(())
     }
@@ -17,9 +14,7 @@ where
     F: Fn(&mut Context) -> Fut,
     Fut: Future<Output = anyhow::Result<()>>,
 {
-    let mut context = Context::<'static> {
-        _phantom: std::marker::PhantomData,
-    };
+    let mut context = Context {};
 
     let mut attempts = 0;
     loop {
@@ -46,3 +41,4 @@ async fn main() {
     })
     .await;
 }
+
