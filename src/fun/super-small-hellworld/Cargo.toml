@@ -1,0 +1,14 @@
+[package]
+name = "just_test"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+libc = "0.2.174"
+
+[profile.release]
+opt-level = "z"
+lto = true
+strip = true
+codegen-units = 1
+panic = "abort"
